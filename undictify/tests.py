@@ -1,10 +1,10 @@
 """
 undictify - tests
 """
-
+import dataclasses
+import enum
 import json
 import pickle
-import sys
 import unittest
 from datetime import datetime
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union, Tuple
@@ -14,11 +14,6 @@ from ._unpack import optional_converter, mandatory_converter
 from ._unpack import type_checked_call, type_checked_constructor
 
 TypeT = TypeVar('TypeT')
-
-VER_3_7_AND_UP = sys.version_info[:3] >= (3, 7, 0)  # PEP 560
-
-if VER_3_7_AND_UP:
-    import dataclasses  # pylint: disable=import-error
 
 
 # pylint: disable=too-many-lines
@@ -194,7 +189,7 @@ class TestUnpackingFoo(unittest.TestCase):  # pylint: disable=too-many-public-me
     def do_test_additional(self, func: Callable[..., TypeT],
                            decorated: bool) -> None:
         """Valid JSON string with an additional field."""
-        object_repr = '{"val": 42, "msg": "hello", "frac": 3.14, ''' \
+        object_repr = '{"val": 42, "msg": "hello", "frac": 3.14, ' \
                       '"flag": true, "opt": 10, "ignore": 1}'
         if not decorated:
             a_foo = type_checked_call(skip=True)(func)(**json.loads(object_repr))
@@ -216,7 +211,7 @@ class TestUnpackingFoo(unittest.TestCase):  # pylint: disable=too-many-public-me
     def do_test_additional_and_convert(self, func: Callable[..., TypeT],
                                        decorated: bool) -> None:
         """Valid JSON string with an additional field and one to convert."""
-        object_repr = '{"val": "42", "msg": "hello", "frac": 3.14, ''' \
+        object_repr = '{"val": "42", "msg": "hello", "frac": 3.14, ' \
                       '"flag": true, "opt": 10, "ignore": 1}'
         if not decorated:
             a_foo = type_checked_call(skip=True, convert=True)(func)(**json.loads(object_repr))
@@ -1283,8 +1278,6 @@ class TestOptionalUnion(unittest.TestCase):
         self.assertEqual('foo', obj.name)
 
 
-@unittest.skipIf(not VER_3_7_AND_UP,
-                 "Python version is not high enough")
 class TestDataClasses(unittest.TestCase):
     """Tests that data classes work as expected"""
 
@@ -1395,3 +1388,94 @@ class TestDataClasses(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             hello(**{'x': 'hello', 'y': 'world', 'z': 'twelve'})
+
+
+class SomeIntEnum(enum.Enum):
+    """An enum with int values"""
+    FOO = 1
+    BAR = 2
+
+
+class SomeAutoEnum(enum.Enum):
+    """An enum with auto values"""
+    FOO = enum.auto()
+    BAR = enum.auto()
+
+
+class SomeStrEnum(enum.Enum):
+    """An enum with str values"""
+    FOO = "FOO"
+    BAR = "NOTEXACTLYBAR"
+
+
+@type_checked_constructor()
+class WithIntEnum(NamedTuple):
+    """Some dummy class with int enum."""
+    int_enum: SomeIntEnum
+
+
+@type_checked_constructor()
+class WithStrEnum(NamedTuple):
+    """Some dummy class with str enum."""
+    str_enum: SomeStrEnum
+
+
+@type_checked_constructor()
+class WithAutoEnum(NamedTuple):
+    """Some dummy class with auto enum."""
+    auto_enum: SomeAutoEnum
+
+
+class TestWithEnums(unittest.TestCase):
+    """Enums should work too"""
+
+    def test_int_enum(self) -> None:
+        """Valid JSON string."""
+        object_repr = '''{"int_enum": 2}'''
+        obj = WithIntEnum(**json.loads(object_repr))
+        self.assertEqual(SomeIntEnum.BAR, obj.int_enum)
+
+    def test_int_enum_invalid(self) -> None:
+        """Invalid JSON string."""
+        object_repr = '''{"int_enum": 9999}'''
+        with self.assertRaises(TypeError):
+            WithIntEnum(**json.loads(object_repr))
+
+    def test_str_enum(self) -> None:
+        """Valid JSON string."""
+        object_repr = '''{"str_enum": "NOTEXACTLYBAR"}'''
+        obj = WithStrEnum(**json.loads(object_repr))
+        self.assertEqual(SomeStrEnum.BAR, obj.str_enum)
+
+    def test_auto_enum(self) -> None:
+        """Valid JSON string."""
+        object_repr = '''{"auto_enum": ''' + str(SomeAutoEnum.FOO.value) + '''}'''
+        obj = WithAutoEnum(**json.loads(object_repr))
+        self.assertEqual(SomeAutoEnum.FOO, obj.auto_enum)
+
+
+@type_checked_constructor(convert=False, skip=False)  # pylint: disable=too-few-public-methods
+class WithOneMember(NamedTuple):
+    """Some dummy class as a NamedTuple."""
+    val: int
+
+
+@type_checked_constructor(convert=True, skip=True)  # pylint: disable=too-few-public-methods
+class WithOneMemberSkipConv(NamedTuple):
+    """Some dummy class as a NamedTuple."""
+    val: int
+
+
+class TestArgsCallsWithOneMember(unittest.TestCase):
+    """Tests function calls with positional and keywords arguments."""
+
+    def test_simple(self) -> None:
+        """Just one check to see if it works nonetheless"""
+        result = WithOneMember(val=42)
+        self.assertEqual(result.val, 42)
+
+    def test_skip_conv(self) -> None:
+        """Just one check to see if it works nonetheless"""
+        object_repr = '{"val": "42", "to_skip": "skip"}'
+        result = WithOneMemberSkipConv(**json.loads(object_repr))
+        self.assertEqual(result.val, 42)
