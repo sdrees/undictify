@@ -275,6 +275,11 @@ def _get_value(func: WrappedOrFunc[TypeT],
                     if value == entry.value:
                         return entry
                 raise TypeError(f'Unable to instantiate {func} from {value}.')
+            if _is_optional_enum_type(func):
+                for entry in _get_optional_type(func):  # type: ignore
+                    if value == entry.value:
+                        return entry
+                raise TypeError(f'Unable to instantiate {func} from {value}.')
             if optional_converters and param_name in optional_converters:
                 result = optional_converters[param_name](value)
                 if not _isinstanceofone(result, allowed_types):
@@ -391,7 +396,7 @@ def _is_list_ish_type(the_type: Callable[..., TypeT]) -> bool:
 
 
 def _is_optional_list_ish_type(the_type: Callable[..., TypeT]) -> bool:
-    """Return True if the type is a Optional[List]."""
+    """Return True if the type is an Optional[List]."""
     if _is_list_ish_type(the_type):
         return True
     if _is_optional_type(the_type) and \
@@ -498,8 +503,13 @@ def _is_enum_type(the_type: Callable[..., TypeT]) -> bool:
         return False
 
 
+def _is_optional_enum_type(the_type: Callable[..., TypeT]) -> bool:
+    """Return True if the type is an Optional[Enum]."""
+    return _is_optional_type(the_type) and _is_enum_type(_get_optional_type(the_type))
+
+
 def _is_union_of_builtins_type(the_type: Callable[..., TypeT]) -> bool:
-    """Return True if the type is an Union only made of
+    """Return True if the type is a Union only made of
     None, str, int, float and bool."""
     if not _is_union_type(the_type):
         return False
